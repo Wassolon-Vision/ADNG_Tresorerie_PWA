@@ -58,7 +58,7 @@ const rubr=()=>st.Q.map(q=>q[0]).concat(st.N);
 const tabs=[['acc','Accueil'],['pay','Paiement'],['rec','Reçus'],['sui','Suivi'],['bud','Budget'],['dep','Dépenses'],['bil','Bilan'],['par','Paramètres'],['don','Données']];
 let cur='acc',selRec=0;
 function go(k){cur=k;$('#nav').innerHTML=tabs.map(t=>`<button class="${t[0]==k?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
-$('#sub').textContent=`Exercice ${st.p.exo} · GNF · 1 FCFA = ${st.p.taux} GNF`;$('#m').innerHTML=V[k]();scrollTo(0,0)}
+$('#sub').textContent=`Exercice ${st.p.exo} · GNF · 1 FCFA = ${st.p.taux} GNF`+(window.OFF||'');$('#m').innerHTML=V[k]();scrollTo(0,0)}
 const V={};
 V.acc=()=>{const a=agg(),bud=tot()*eff()*12,enc=a.q.reduce((x,y)=>x+y,0),nx=a.x.reduce((x,y)=>x+y,0),d=dep();
 return `<div style="text-align:center;margin:4px 0 12px"><img src="${LOGO}" alt="Logo ADNG" style="width:130px;height:auto;border-radius:12px"><div style="font-weight:bold;color:var(--g);margin-top:6px">Ançar Dine National de Guinée</div></div><div class="card"><div class="k"><div><span>Effectif total</span><b>${fmt(eff())}</b></div><div><span>Budget annuel prévu</span><b>${fmt(bud)}</b></div>
@@ -168,4 +168,4 @@ function impJ(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.on
 $('#lg').src=LOGO;$('#wm').style.backgroundImage='url('+LOGO+')';
 go('acc');
 </script>
-<script>if('serviceWorker' in navigator&&location.protocol.indexOf('http')==0)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))</script></body></html>
+<script>var OFF='';if('serviceWorker' in navigator&&location.protocol.indexOf('http')==0)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>{OFF=' · hors ligne prêt ✓';var e=document.getElementById('sub');if(e)e.textContent+=OFF}).catch(()=>{}))</script></body></html>
