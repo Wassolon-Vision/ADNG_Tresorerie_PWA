@@ -44,11 +44,29 @@ S:[['SGR','Siguiri',45],['KNK','Kankan',25],['BLD','Banlandougouna',80],['TTK','
 Q:[['Quota FADI',5000],['Quota mosquée',5000],['Quota agrément nationale',3000],['Quota mission bureau',5000],['Quota fonctionnement du bureau',7000],['Quota woudou',3000],['Quota siège nationale',10000],['Quota réunion nationale',5000],['Quota mission CCN',4000],['Quota sucre du guide',3000]],
 N:['Cas sociaux','Zikiri','Koumouss'],V:[],D:[]});
 let st=null;try{st=JSON.parse(localStorage.getItem(KEY))}catch(e){}
-if(!st)st=def();if(!st.R)st.R=[];
+if(!st)st=def();if(!st.R)st.R=[];migr();
+let me={r:'nat',si:0,p:''};
+const hp=s=>{let h=5381;for(const c of String(s))h=((h<<5)+h+c.charCodeAt(0))|0;return String(h)};
+const isN=()=>me&&me.r=='nat',isS=()=>me&&me.r=='sec',isL=()=>me&&me.r=='lec',W=()=>isN()||isS();
+const allow=()=>isN()?['acc','pay','rec','jou','sui','bud','dep','bil','rap','par','don']:isS()?['acc','pay','rec','sui','don']:['acc','rec','jou','sui','bud','bil','rap','don'];
+const roleLbl=()=>'';
+function setup(){cur='';$('#nav').innerHTML='';$('#sub').textContent='Choix du profil';
+$('#m').innerHTML=`<div class="card"><h3>Qui utilise cet appareil ?</h3><label>Profil</label><select id="sr" oninput="swR()"><option value="nat">Admin national (tout, fusion des fichiers)</option><option value="sec">Admin de section (saisie de sa section)</option><option value="lec">Lecteur (consultation seulement)</option></select>
+<div id="ss" style="display:none"><label>Section</label><select id="si">${st.S.map((s,i)=>`<option value="${i}">${mat(i)} — ${esc(s[1])}</option>`).join('')}</select></div>
+<label>Code PIN à 4 chiffres (demandé pour changer de profil)</label><input id="sp" inputmode="numeric" maxlength="4" type="password"><button class="btn" onclick="setMe()">Valider</button>
+<p class="note">Sans serveur, le profil limite l’affichage de cet appareil. La copie de référence reste celle de l’admin national.</p></div>`}
+function swR(){$('#ss').style.display=$('#sr').value=='sec'?'block':'none'}
+function setMe(){const r=$('#sr').value,p=$('#sp').value;if(!/^\d{4}$/.test(p))return alert('Le code PIN doit comporter 4 chiffres.');me={r,si:r=='sec'?+$('#si').value:0,p:hp(p)};try{localStorage.setItem('adng_me',JSON.stringify(me))}catch(e){}go('acc')}
+function chgRole(){const p=prompt('Code PIN de cet appareil :');if(hp(p||'')!==me.p)return alert('Code incorrect.');try{localStorage.removeItem('adng_me')}catch(e){}me=null;go('acc')}
+function newU(si){const p='REC-'+st.S[si][0]+'-';let n=0;st.V.forEach(v=>{if(v.u&&v.u.indexOf(p)==0)n=Math.max(n,parseInt(v.u.slice(p.length))||0)});return p+String(n+1).padStart(4,'0')}
+function merge(f){let a=0,u=0,s=0;(f.V||[]).filter(w=>w.si==f.si).forEach(w=>{const k=w.u||('L'+w.id),e=st.V.find(v=>(v.u||('L'+v.id))==k);
+if(!e){st.V.push(Object.assign({},w,{id:st.V.reduce((x,y)=>Math.max(x,y.id),0)+1}));a++}else if((w.t||0)>(e.t||0)){const id=e.id;Object.assign(e,w,{id});u++}else s++});save();return [a,u,s]}
+function expSec(){bk();dl(new Blob([JSON.stringify({type:'section',si:me.si,mats:st.S.map((s,i)=>mat(i)),V:st.V.filter(v=>v.si==me.si),t:Date.now()})],{type:'application/json'}),'ADNG_section_'+st.S[me.si][0]+'_'+today()+'.json')}
+
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){alert('Sauvegarde impossible sur ce navigateur : utilisez l’export dans Données.')}};
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>Math.round(n||0).toLocaleString('fr-FR'),$=s=>document.querySelector(s);
-const mat=i=>'ADNG-'+st.S[i][0]+'-'+String(i+1).padStart(2,'0'),rid=v=>'REC-'+String(v.id).padStart(4,'0');
+const mat=i=>'ADNG-'+st.S[i][0]+'-'+String(i+1).padStart(2,'0'),rid=v=>v.u||'REC-'+String(v.id).padStart(4,'0');
 const fd=d=>d.split('-').reverse().join('/'),today=()=>new Date().toISOString().slice(0,10);
 const tot=()=>st.Q.reduce((a,q)=>a+q[1],0),eff=()=>st.S.reduce((a,s)=>a+s[2],0);
 const split=g=>{const T=tot(),n=st.Q.length;let r=st.Q.map(q=>Math.round(g*q[1]/T));r[n-1]=g-r.slice(0,n-1).reduce((a,b)=>a+b,0);return r};
@@ -58,8 +76,8 @@ const dep=()=>st.D.filter(d=>!d.an).reduce((a,d)=>a+d.m,0);
 const rubr=()=>st.Q.map(q=>q[0]).concat(st.N);
 const tabs=[['acc','Accueil'],['pay','Paiement'],['rec','Reçus'],['jou','Journal'],['sui','Suivi'],['bud','Budget'],['dep','Dépenses'],['bil','Bilan'],['rap','Rapport'],['par','Paramètres'],['don','Données']];
 let cur='acc',selRec=0;
-function go(k){cur=k;$('#nav').innerHTML=tabs.map(t=>`<button class="${t[0]==k?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
-$('#sub').textContent=`Exercice ${st.p.exo} · GNF · 1 FCFA = ${st.p.taux} GNF`+(window.OFF||'');$('#m').innerHTML=V[k]();scrollTo(0,0)}
+function go(k){if(!me)return setup();if(!allow().includes(k))k='acc';cur=k;$('#nav').innerHTML=tabs.filter(t=>allow().includes(t[0])).map(t=>`<button class="${t[0]==k?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+$('#sub').textContent=`Exercice ${st.p.exo} · GNF · 1 FCFA = ${st.p.taux} GNF`+(window.OFF||'');$('#sub').textContent+=roleLbl();$('#m').innerHTML=V[k]();scrollTo(0,0)}
 const V={};
 V.acc=()=>{const a=agg(),bud=tot()*eff()*12,enc=a.q.reduce((x,y)=>x+y,0),nx=a.x.reduce((x,y)=>x+y,0),d=dep();
 return `<div style="text-align:center;margin:4px 0 12px"><img src="${LOGO}" alt="Logo ADNG" style="width:130px;height:auto;border-radius:12px"><div style="font-weight:bold;color:var(--g);margin-top:6px">Ançar Dine National de Guinée</div></div><div class="card"><div class="k"><div><span>Effectif total</span><b>${fmt(eff())}</b></div><div><span>Budget annuel prévu</span><b>${fmt(bud)}</b></div>
@@ -67,9 +85,9 @@ return `<div style="text-align:center;margin:4px 0 12px"><img src="${LOGO}" alt=
 <div><span>Non ordinaire encaissé</span><b>${fmt(nx)}</b></div><div><span>Dépenses</span><b>${fmt(d)}</b></div>
 <div><span>Solde disponible en caisse</span><b>${fmt((st.p.s0||0)+enc+nx-d)}</b></div><div><span>Reçus émis</span><b>${st.V.filter(v=>!v.an).length}</b></div></div></div>
 <button class="btn" onclick="go('pay')">Nouveau paiement</button><button class="btn s" onclick="go('dep')">Nouvelle dépense</button>
-<p class="note">Les données sont enregistrées dans ce téléphone. Pensez à exporter une sauvegarde (onglet Données).</p>`};
+<p class="note">${bkMsg()}</p>`};
 V.pay=()=>`<div class="card"><h3>Paiement d’une section</h3>
-<label>Matricule</label><select id="ms" oninput="prev()">${st.S.map((s,i)=>`<option value="${i}">${mat(i)} — ${esc(s[1])}</option>`).join('')}</select>
+<label>Matricule</label><select id="ms" oninput="prev()">${st.S.map((s,i)=>(isS()&&i!=me.si)?'':`<option value="${i}">${mat(i)} — ${esc(s[1])}</option>`).join('')}</select>
 <label>Date</label><input type="date" id="dt" value="${today()}">
 <label>Mois concerné</label><select id="mo" oninput="prev()">${MOIS.map((m,i)=>`<option ${i+1==st.p.mois?'selected':''}>${m}</option>`).join('')}</select>
 <label>Mode de paiement</label><select id="md">${MODES.map(m=>`<option>${m}</option>`).join('')}</select>
@@ -82,15 +100,15 @@ function prev(){const i=+$('#ms').value,g=num('g'),mo=$('#mo').value,att=st.S[i]
 dj=st.V.filter(v=>v.si==i&&v.mo==mo&&!v.an).reduce((a,v)=>a+v.g,0);
 $('#pv').innerHTML=`Attendu pour ${mo} : <b>${fmt(att)}</b> · déjà versé : ${fmt(dj)} · reste après ce versement : <b>${fmt(Math.max(0,att-dj-g))}</b>`+
 (g?'<br>'+split(g).map((k,j)=>esc(st.Q[j][0])+' : '+fmt(k)).join('<br>'):'')}
-function savePay(){const g=num('g'),x=st.N.map((n,j)=>num('x'+j));
+function savePay(){if(!W())return;const g=num('g'),x=st.N.map((n,j)=>num('x'+j));
 if(g+x.reduce((a,b)=>a+b,0)<=0)return alert('Saisissez au moins un montant.');if(!$('#dt').value)return alert('Date manquante.');
-const v={id:(st.V.reduce((a,b)=>Math.max(a,b.id),0))+1,d:$('#dt').value,si:+$('#ms').value,mo:$('#mo').value,mode:$('#md').value,g,x,ob:$('#ob').value,sp:split(g).map((k,j)=>[st.Q[j][0],k])};
-st.V.push(v);save();showRecu(v.id)}
+const v={id:(st.V.reduce((a,b)=>Math.max(a,b.id),0))+1,u:newU(+$('#ms').value),t:Date.now(),d:$('#dt').value,si:+$('#ms').value,mo:$('#mo').value,mode:$('#md').value,g,x,ob:$('#ob').value,sp:split(g).map((k,j)=>[st.Q[j][0],k])};
+if(g>0&&st.V.some(w=>!w.an&&w.si==v.si&&w.mo==v.mo&&w.g>0)&&!confirm('Un versement ordinaire existe déjà pour cette section en '+v.mo+'. Enregistrer quand même (complément) ?'))return;st.V.push(v);save();showRecu(v.id)}
 function recuLines(v){const L=[['Date : '+fd(v.d)],['Section : '+st.S[v.si][1]],['Matricule : '+mat(v.si)],['Mois : '+v.mo+' · '+v.mode],['---']];
 spl(v).forEach((k,j)=>{if(k)L.push([st.Q[j][0],fmt(k)])});v.x.forEach((k,j)=>{if(k)L.push([st.N[j]+' (non ord.)',fmt(k)])});
 const T=v.g+xs(v);L.push(['---']);L.push(['TOTAL VERSÉ (GNF)',fmt(T),1]);L.push(['Équivalent FCFA',fmt(T/st.p.taux)]);if(v.ob)L.push(['Obs. : '+v.ob]);return L}
 function showRecu(id){const v=st.V.find(x=>x.id==id);cur='rec';$('#m').innerHTML=`<div class="card"><div style="text-align:center"><img src="${LOGO}" alt="" style="width:70px;border-radius:8px"></div><h3>Reçu ${rid(v)}</h3>${v.an?`<p class="bad">REÇU ANNULÉ le ${fd(v.an.d)} — ${esc(v.an.m)}</p>`:''}<table>${recuLines(v).map(l=>l[0]=='---'?'<tr><td colspan=2><hr></td></tr>':`<tr><td ${l[2]?'class="good"':''}>${esc(l[0])}</td><td>${l[1]||''}</td></tr>`).join('')}</table></div>
-<button class="btn" onclick="shareRecu(${id})">Partager en image (WhatsApp)</button><button class="btn s np" onclick="print()">Imprimer le reçu</button>${v.an?`<button class="btn s" onclick="retV(${id})">Rétablir ce reçu</button>`:`<button class="btn d" onclick="annulV(${id})">Annuler ce paiement / reçu</button>`}<button class="btn s" onclick="go('rec')">Retour aux reçus</button>`}
+<button class="btn" onclick="shareRecu(${id})">Partager en image (WhatsApp)</button><button class="btn s np" onclick="print()">Imprimer le reçu</button>${isL()?'':v.an?`<button class="btn s" onclick="retV(${id})">Rétablir ce reçu</button>`:`<button class="btn d" onclick="annulV(${id})">Annuler ce paiement / reçu</button>`}<button class="btn s" onclick="go('rec')">Retour aux reçus</button>`}
 function shareRecu(id){const v=st.V.find(x=>x.id==id),L=recuLines(v),c=document.createElement('canvas'),W=640,H=175+L.length*32+60;c.width=W;c.height=H;const x=c.getContext('2d');
 x.fillStyle='#fff';x.fillRect(0,0,W,H);if(LG.complete&&LG.width){x.globalAlpha=.08;const w=340,h=w*LG.height/LG.width;x.drawImage(LG,W/2-w/2,H/2-h/2,w,h);x.globalAlpha=1}x.fillStyle='#1b5e20';x.fillRect(0,0,W,90);if(LG.complete&&LG.width){x.fillStyle='#fff';x.beginPath();x.arc(48,45,34,0,7);x.fill();x.save();x.beginPath();x.arc(48,45,32,0,7);x.clip();x.drawImage(LG,16,13,64,64*LG.height/LG.width);x.restore()}x.fillStyle='#fff';x.font='bold 21px Arial';x.fillText('ANÇAR DINE NATIONAL DE GUINÉE',96,40);x.font='16px Arial';x.fillText('Reçu de paiement des quotas — '+rid(v),96,68);
 let y=135;L.forEach(l=>{if(l[0]=='---'){x.strokeStyle='#999';x.beginPath();x.moveTo(20,y-14);x.lineTo(W-20,y-14);x.stroke();return}
@@ -101,12 +119,12 @@ c.toBlob(async b=>{const f=new File([b],rid(v)+'.png',{type:'image/png'});
 try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:rid(v)});return}}catch(e){if(e.name=='AbortError')return}
 dl(b,rid(v)+'.png')})}
 function dl(b,n){const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)}
-V.rec=()=>{const l=st.V.map(v=>v).filter(v=>v.si==selRec).reverse();
-return `<div class="card"><h3>Historique des reçus</h3><select oninput="selRec=+this.value;go('rec')">${st.S.map((s,i)=>`<option value="${i}" ${i==selRec?'selected':''}>${mat(i)} — ${esc(s[1])}</option>`).join('')}</select>
+V.rec=()=>{if(isS())selRec=me.si;const l=st.V.map(v=>v).filter(v=>v.si==selRec).reverse();
+return `<div class="card"><h3>Historique des reçus</h3><select oninput="selRec=+this.value;go('rec')">${st.S.map((s,i)=>(isS()&&i!=me.si)?'':`<option value="${i}" ${i==selRec?'selected':''}>${mat(i)} — ${esc(s[1])}</option>`).join('')}</select>
 <p>Total versé : <b>${fmt(l.filter(v=>!v.an).reduce((a,v)=>a+v.g+xs(v),0))} GNF</b> · ${l.length} reçu(s)</p>
-<div class="w"><table><tr><th>Reçu</th><th>Date</th><th>Mois</th><th>Total</th><th></th></tr>${l.map(v=>`<tr ${v.an?'style="opacity:.55;text-decoration:line-through"':''}><td>${rid(v)}</td><td>${fd(v.d)}</td><td>${v.mo}</td><td>${fmt(v.g+xs(v))}</td><td><button onclick="showRecu(${v.id})">Voir</button> ${v.an?`<button onclick="retV(${v.id})">Rétablir</button>`:`<button onclick="annulV(${v.id})">Annuler</button>`}</td></tr>`).join('')}</table></div></div>`};
+<div class="w"><table><tr><th>Reçu</th><th>Date</th><th>Mois</th><th>Total</th><th></th></tr>${l.map(v=>`<tr ${v.an?'style="opacity:.55;text-decoration:line-through"':''}><td>${rid(v)}</td><td>${fd(v.d)}</td><td>${v.mo}</td><td>${fmt(v.g+xs(v))}</td><td><button onclick="showRecu(${v.id})">Voir</button> ${isL()?'':v.an?`<button onclick="retV(${v.id})">Rétablir</button>`:`<button onclick="annulV(${v.id})">Annuler</button>`} ${isN()?`<button onclick="delOp('v',${v.id})">Supprimer</button>`:''}</td></tr>`).join('')}</table></div></div>`};
 function delV(id){if(confirm('Supprimer ce versement ?')){st.V=st.V.filter(v=>v.id!=id);save();go('rec')}}
-V.sui=()=>{const a=agg();let rows=st.S.map((s,i)=>{const att=s[2]*st.p.cotis*st.p.mois,e=a.s[i].g,ar=Math.max(0,att-e),stt=!a.s[i].n?'Aucun paiement':ar?'Arriérés':'À jour';
+V.sui=()=>{const a=agg();let rows=st.S.map((s,i)=>{if(isS()&&i!=me.si)return '';const att=s[2]*st.p.cotis*st.p.mois,e=a.s[i].g,ar=Math.max(0,att-e),stt=!a.s[i].n?'Aucun paiement':ar?'Arriérés':'À jour';
 return `<tr><td>${mat(i)}<br><span class="note">${esc(s[1])} (${s[2]})</span></td><td>${fmt(att)}</td><td>${fmt(e)}</td><td class="${ar?'bad':'good'}">${fmt(ar)}</td><td class="${stt=='À jour'?'good':'bad'}">${stt}</td></tr>`}).join('');
 return `<div class="card"><h3>Suivi des sections (jusqu’au mois ${st.p.mois})</h3><div class="w"><table><tr><th>Section</th><th>Attendu</th><th>Encaissé</th><th>Arriérés</th><th>Statut</th></tr>${rows}</table></div></div>`};
 V.bud=()=>{const a=agg(),E=eff();return `<div class="card"><h3>Budget prévisionnel (quotas ordinaires)</h3><div class="w"><table><tr><th>Quota</th><th>Part</th><th>Annuel</th><th>Encaissé</th><th>%</th></tr>
@@ -116,36 +134,50 @@ ${st.Q.map((q,j)=>{const an=q[1]*E*12;return `<tr><td>${esc(q[0])}</td><td>${fmt
 V.dep=()=>`<div class="card"><h3>Nouvelle dépense</h3><label>Date</label><input type="date" id="dd" value="${today()}"><label>Rubrique</label><select id="dr">${rubr().map(r=>`<option>${esc(r)}</option>`).join('')}</select>
 <label>Libellé</label><input id="dl"><label>Bénéficiaire</label><input id="db"><label>Montant (GNF)</label><input id="dm" inputmode="numeric"><label>N° pièce</label><input id="dp">
 <button class="btn" onclick="saveDep()">Enregistrer la dépense</button></div>
-<div class="card"><h3>Dépenses (${fmt(dep())} GNF)</h3><div class="w"><table>${st.D.slice().reverse().map((d,i)=>`<tr ${d.an?'style="opacity:.55;text-decoration:line-through"':''}><td>${fd(d.d)}<br><span class="note">${esc(d.r)} — ${esc(d.l)}${d.an?' — ANNULÉE : '+esc(d.an.m):''}</span></td><td>${fmt(d.m)}</td><td>${d.an?`<button onclick="retD(${st.D.indexOf(d)})">Rétablir</button>`:`<button onclick="annulD(${st.D.indexOf(d)})">Annuler</button>`}</td></tr>`).join('')}</table></div></div>`;
-function saveDep(){const m=num('dm');if(!m)return alert('Saisissez un montant.');st.D.push({d:$('#dd').value,r:$('#dr').value,l:$('#dl').value,b:$('#db').value,m,pj:$('#dp').value});save();go('dep')}
+<div class="card"><h3>Dépenses (${fmt(dep())} GNF)</h3><div class="w"><table>${st.D.slice().reverse().map((d,i)=>`<tr ${d.an?'style="opacity:.55;text-decoration:line-through"':''}><td>${fd(d.d)}<br><span class="note">${esc(d.r)} — ${esc(d.l)}${d.an?' — ANNULÉE : '+esc(d.an.m):''}</span></td><td>${fmt(d.m)}</td><td>${d.an?`<button onclick="retD(${st.D.indexOf(d)})">Rétablir</button>`:`<button onclick="annulD(${st.D.indexOf(d)})">Annuler</button>`} <button onclick="delOp('d',${st.D.indexOf(d)})">Supprimer</button></td></tr>`).join('')}</table></div></div>`;
+function saveDep(){if(!isN())return;const m=num('dm');if(!m)return alert('Saisissez un montant.');st.D.push({d:$('#dd').value,r:$('#dr').value,l:$('#dl').value,b:$('#db').value,m,pj:$('#dp').value});save();go('dep')}
 function delD(i){if(confirm('Supprimer cette dépense ?')){st.D.splice(i,1);save();go('dep')}}
-V.bil=()=>{const a=agg(),R=rubr(),enc=R.map((r,j)=>j<st.Q.length?a.q[j]:a.x[j-st.Q.length]),sp=R.map(r=>st.D.filter(d=>d.r==r&&!d.an).reduce((x,d)=>x+d.m,0));
-return `<div class="card"><h3>Bilan par rubrique (GNF)</h3><div class="w"><table><tr><th>Rubrique</th><th>Encaissé</th><th>Dépensé</th><th>Solde</th></tr>
-${R.map((r,j)=>`<tr><td>${esc(r)}</td><td>${fmt(enc[j])}</td><td>${fmt(sp[j])}</td><td class="${enc[j]-sp[j]<0?'bad':''}">${fmt(enc[j]-sp[j])}</td></tr>`).join('')}
-<tr><td><b>TOTAL</b></td><td><b>${fmt(enc.reduce((x,y)=>x+y,0))}</b></td><td><b>${fmt(sp.reduce((x,y)=>x+y,0))}</b></td><td><b>${fmt(enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0))}</b></td></tr></table></div>
-<p>Reste à reverser à la FADI : <b>${fmt(enc[0]-sp[0])} GNF</b></p><table><tr><td>Ancien solde en caisse${st.p.s0d?' ('+fd(st.p.s0d)+')':''}${st.p.s0n?' — '+esc(st.p.s0n):''}</td><td>${fmt(st.p.s0||0)}</td></tr><tr><td><b>Solde disponible en caisse</b></td><td class="${(st.p.s0||0)+enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0)<0?'bad':'good'}">${fmt((st.p.s0||0)+enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0))}</td></tr></table></div>`};
+V.bil=()=>{const a=agg(),R=rubr(),enc=R.map((r,j)=>j<st.Q.length?a.q[j]:a.x[j-st.Q.length]),sp=R.map(r=>st.D.filter(d=>d.r==r&&!d.an).reduce((x,d)=>x+d.m,0)),os=R.map(r=>(st.p.s0r||{})[r]||0),un=(st.p.s0||0)-os.reduce((x,y)=>x+y,0);
+return `<div class="card"><h3>Bilan par rubrique (GNF)</h3><div class="w"><table><tr><th>Rubrique</th><th>Ancien solde</th><th>Encaissé</th><th>Dépensé</th><th>Solde</th></tr>
+${R.map((r,j)=>`<tr><td>${esc(r)}</td><td>${fmt(os[j])}</td><td>${fmt(enc[j])}</td><td>${fmt(sp[j])}</td><td class="${os[j]+enc[j]-sp[j]<0?'bad':''}">${fmt(os[j]+enc[j]-sp[j])}</td></tr>`).join('')}${un?`<tr><td>Non réparti (caisse générale)</td><td>${fmt(un)}</td><td></td><td></td><td>${fmt(un)}</td></tr>`:''}
+<tr><td><b>TOTAL</b></td><td><b>${fmt(os.reduce((x,y)=>x+y,0)+(un>0?un:0))}</b></td><td><b>${fmt(enc.reduce((x,y)=>x+y,0))}</b></td><td><b>${fmt(sp.reduce((x,y)=>x+y,0))}</b></td><td><b>${fmt(os.reduce((x,y)=>x+y,0)+(un>0?un:0)+enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0))}</b></td></tr></table></div>
+<p>Reste à reverser à la FADI : <b>${fmt(os[0]+enc[0]-sp[0])} GNF</b></p><table><tr><td>Ancien solde en caisse${st.p.s0d?' ('+fd(st.p.s0d)+')':''}${st.p.s0n?' — '+esc(st.p.s0n):''}</td><td>${fmt(st.p.s0||0)}</td></tr><tr><td><b>Solde disponible en caisse</b></td><td class="${(st.p.s0||0)+enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0)<0?'bad':'good'}">${fmt((st.p.s0||0)+enc.reduce((x,y)=>x+y,0)-sp.reduce((x,y)=>x+y,0))}</td></tr></table></div>`};
 V.par=()=>`<div class="card"><h3>Paramètres</h3><label>Taux : 1 FCFA = … GNF (indicatif)</label><input id="pt" inputmode="decimal" value="${st.p.taux}">
 <label>Cotisation mensuelle par membre (GNF)</label><input id="pc" inputmode="numeric" value="${st.p.cotis}"><label>Mois en cours (1 à 12)</label><input id="pm" inputmode="numeric" value="${st.p.mois}">
 <label>Exercice</label><input id="pe" inputmode="numeric" value="${st.p.exo}">
-<h3 style="margin-top:14px">Ancien solde en caisse</h3><label>Montant reporté (GNF)</label><input id="s0" inputmode="numeric" value="${st.p.s0||''}"><label>Date du report</label><input type="date" id="s0d" value="${st.p.s0d||''}"><label>Note (ex. solde au 31/12)</label><input id="s0n" value="${esc(st.p.s0n||'')}"><p class="note">Ce montant s’ajoute au solde disponible en caisse (accueil et bilan).</p>
+<h3 style="margin-top:14px">Ancien solde en caisse</h3>
+<p>Total reporté : <b>${fmt(st.p.s0||0)} GNF</b></p>
+${(st.p.rep||[]).map((e,i)=>`<div style="display:flex;gap:6px;align-items:center;margin-top:6px"><div style="flex:1;font-size:13px">${fmt(e.m)} GNF — ${esc(e.r||'Caisse générale')}${e.d?' ('+fd(e.d)+')':''}${e.n?' — '+esc(e.n):''}</div><button class="btn d" style="width:auto;margin:0;padding:6px 12px" onclick="delRep(${i})">✕</button></div>`).join('')}
+<label>Nouveau montant reporté (GNF)</label><input id="rm" inputmode="numeric">
+<label>Rattacher à</label><select id="rr"><option value="">Caisse générale (non réparti)</option>${rubr().map(r=>`<option>${esc(r)}</option>`).join('')}</select>
+<label>Date du report</label><input type="date" id="rd" value="${today()}"><label>Note</label><input id="rn2">
+<button class="btn s" onclick="addRep()">Ajouter cet ancien solde</button>
+<p class="note">Chaque ajout s’ajoute au solde disponible en caisse, puis les champs se vident. Pour répartir sur plusieurs quotas, ajoutez une ligne par quota. Le ✕ supprime une ligne.</p>
 <h3 style="margin-top:14px">Effectifs</h3>${st.S.map((s,i)=>`<label>${mat(i)} — ${esc(s[1])}</label><input id="se${i}" inputmode="numeric" value="${s[2]}">`).join('')}
 <h3 style="margin-top:14px">Quotas ordinaires (total ${fmt(tot())} / ${fmt(st.p.cotis)} GNF)</h3>${st.Q.map((q,j)=>`<label>Nom et part par membre</label><div style="display:flex;gap:6px"><input id="qn${j}" value="${esc(q[0])}"><input id="qp${j}" inputmode="numeric" value="${q[1]}" style="width:34%"><button class="btn d" style="width:auto;margin:0;padding:0 14px" onclick="delQ(${j})">✕</button></div>`).join('')}
 <p class="note">Les parts et la cotisation sont modifiables à tout moment. Un changement ne modifie pas les paiements déjà enregistrés.</p><h3 style="margin-top:14px">Ajouter un quota ordinaire</h3><input id="nq" placeholder="Nom du quota"><label>Part par membre (GNF) — les autres parts sont réduites pour garder le total</label><input id="pq" inputmode="numeric"><button class="btn s" onclick="addQ()">Ajouter ce quota</button>
 <h3 style="margin-top:14px">Rubriques non ordinaires (hors budget)</h3>${st.N.map((n,j)=>`<div style="display:flex;gap:6px;margin-top:6px"><input id="nn${j}" value="${esc(n)}"><button class="btn d" style="width:auto;margin:0;padding:0 14px" onclick="delN(${j})">✕</button></div>`).join('')}
 <input id="nnew" placeholder="Nouvelle rubrique non ordinaire" style="margin-top:8px"><button class="btn s" onclick="addN()">Ajouter cette rubrique</button>
 <button class="btn" onclick="savePar()">Enregistrer les paramètres</button></div>`;
-function sv(){const p=st.p;p.taux=parseFloat($('#pt').value)||15;p.cotis=parseFloat($('#pc').value)||50000;p.mois=Math.min(12,Math.max(1,parseInt($('#pm').value)||1));p.exo=parseInt($('#pe').value)||2026;p.s0=parseFloat($('#s0').value)||0;p.s0d=$('#s0d').value;p.s0n=$('#s0n').value;
+function sv(){const p=st.p;p.taux=parseFloat($('#pt').value)||15;p.cotis=parseFloat($('#pc').value)||50000;p.mois=Math.min(12,Math.max(1,parseInt($('#pm').value)||1));p.exo=parseInt($('#pe').value)||2026;
 st.S.forEach((s,i)=>s[2]=parseInt($('#se'+i).value)||0);st.Q.forEach((q,j)=>{rn(q,0,'qn'+j);q[1]=parseFloat($('#qp'+j).value)||0});st.N.forEach((n,j)=>rn(st.N,j,'nn'+j));save();
 }
 function savePar(){const oc=st.p.cotis;sv();if(oc!=st.p.cotis&&tot()==oc){rebal(-1);save()}if(tot()!=st.p.cotis)alert('Attention : la somme des parts ('+fmt(tot())+') diffère de la cotisation ('+fmt(st.p.cotis)+').');go('par')}
-V.don=()=>`<div class="card"><h3>Sauvegarde et échange avec Excel</h3>
-<button class="btn" onclick="expJ()">Exporter une sauvegarde complète (.json)</button>
-<button class="btn s" onclick="expC()">Exporter le journal (.csv) pour Excel</button>
-<label>Restaurer une sauvegarde (.json)</label><input type="file" accept=".json,application/json" onchange="impJ(this)">
-<p class="note">Le CSV s’ouvre dans Excel : copiez ses lignes dans les colonnes de saisie du JOURNAL. Exportez régulièrement et envoyez la sauvegarde par WhatsApp ou e-mail.</p></div>`;
+V.don=()=>`<div class="card"><h3>Échange de fichiers</h3>
+${isN()?`<button class="btn" onclick="expJ()">Exporter la sauvegarde complète (.json) — à conserver en lieu sûr</button><button class="btn s" onclick="expC()">Exporter le journal (.csv) pour Excel</button><label>Restaurer une sauvegarde (remplace les données de cet appareil)</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
+${isS()?`<button class="btn" onclick="expSec()">Exporter mes paiements (.json) — à envoyer à l’admin national</button><label>Recevoir la configuration (sauvegarde de l’admin national)</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
+${isL()?`<label>Recevoir la dernière sauvegarde de l’admin national</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
+
+<p class="note">Exportez régulièrement une sauvegarde complète et conservez-la hors du téléphone (WhatsApp, e-mail, Drive). Elle sert aussi à transférer vos données vers un autre appareil.</p></div><div class="card"><h3>En cas de perte du téléphone</h3>
+<p class="note">Votre application se retrouve à ce lien, toujours dans sa dernière version publiée :</p>
+<p style="word-break:break-all"><b>${esc(appUrl())}</b></p>
+<button class="btn" onclick="shareLink()">Partager ou copier le lien</button>
+<button class="btn" onclick="shareBackup()">Envoyer ma sauvegarde (WhatsApp, e-mail, Drive)</button>
+<button class="btn s" onclick="saveApp()">Enregistrer une copie de l’application (fichier)</button>
+<p class="note">Sur un nouveau téléphone : 1) ouvrez le lien dans Chrome avec internet ; 2) menu ⋮ puis « Installer l’application » ; 3) onglet Données puis « Restaurer une sauvegarde » avec votre dernier fichier .json. Sans sauvegarde envoyée hors du téléphone, les données ne peuvent pas être récupérées.</p></div>`;
 
 const xs=v=>v.x.reduce((a,b)=>a+b,0);
-function rn(arr,i,id){const e=$('#'+id);if(!e)return;const nm=e.value.trim(),old=arr[i];if(nm&&nm!=old){st.D.forEach(d=>{if(d.r==old)d.r=nm});st.V.forEach(v=>(v.sp||[]).forEach(a=>{if(a[0]==old)a[0]=nm}));arr[i]=nm}}
+function rn(arr,i,id){const e=$('#'+id);if(!e)return;const nm=e.value.trim(),old=arr[i];if(nm&&nm!=old){st.D.forEach(d=>{if(d.r==old)d.r=nm});(st.p.rep||[]).forEach(e=>{if(e.r==old)e.r=nm});calcRep();st.V.forEach(v=>(v.sp||[]).forEach(a=>{if(a[0]==old)a[0]=nm}));arr[i]=nm}}
 function rebal(keep){const C=st.p.cotis,k=keep>=0?st.Q[keep][1]:0,oth=st.Q.map((q,i)=>i).filter(i=>i!=keep),T=oth.reduce((a,i)=>a+st.Q[i][1],0);
 if(!oth.length||!T)return;oth.forEach(i=>st.Q[i][1]=Math.round(st.Q[i][1]*(C-k)/T));
 const d=C-st.Q.reduce((a,q)=>a+q[1],0),big=oth.reduce((a,i)=>st.Q[i][1]>st.Q[a][1]?i:a,oth[0]);st.Q[big][1]+=d}
@@ -156,29 +188,29 @@ st.Q.push([n,p]);rebal(st.Q.length-1);save();alert('Quota ajouté. Les autres pa
 function delQ(j){sv();if(st.Q.length<2)return alert('Il faut garder au moins un quota.');const n=st.Q[j][0];if(st.V.some(v=>(v.sp||[]).some(a=>a[0]==n&&a[1]>0)))return alert('Des paiements enregistrés utilisent « '+n+' ». Pour l’arrêter, mettez sa part à 0 : l’historique reste intact.');
 if(st.D.some(d=>d.r==n))return alert('Des dépenses sont rattachées à « '+n+' ». Supprimez-les ou changez leur rubrique d’abord.');
 if(!confirm('Supprimer « '+n+' » ? Sa part sera répartie sur les autres quotas.'))return;
-st.Q.splice(j,1);rebal(-1);save();go('par')}
+st.Q.splice(j,1);rebal(-1);st.p.rep.forEach(e=>{if(e.r==n)e.r=''});calcRep();save();go('par')}
 function addN(){sv();const n=$('#nnew').value.trim();if(!n)return alert('Saisissez le nom de la rubrique.');if(rubr().includes(n))return alert('Cette rubrique existe déjà.');
 st.N.push(n);st.V.forEach(v=>v.x.push(0));save();go('par')}
 function delN(j){sv();const n=st.N[j];if(st.D.some(d=>d.r==n))return alert('Des dépenses sont rattachées à « '+n+' ». Supprimez-les d’abord.');
 const m=st.V.reduce((a,v)=>a+(v.x[j]||0),0);if(!confirm('Supprimer « '+n+' » ?'+(m?' Les '+fmt(m)+' GNF déjà encaissés sur cette rubrique disparaîtront des reçus.':'')))return;
-st.N.splice(j,1);st.V.forEach(v=>v.x.splice(j,1));save();go('par')}
+st.N.splice(j,1);st.V.forEach(v=>v.x.splice(j,1));st.p.rep.forEach(e=>{if(e.r==n)e.r=''});calcRep();save();go('par')}
 
 const spl=v=>v.sp?st.Q.map(q=>{const f=v.sp.find(a=>a[0]==q[0]);return f?f[1]:0}):split(v.g);
 const tv=v=>v.g+xs(v);
-function allOps(){const o=[];st.V.forEach(v=>o.push({d:v.d,id:v.id,l:rid(v)+' — '+st.S[v.si][1]+' ('+v.mo+')'+(v.an?' — ANNULÉ : '+v.an.m:''),e:tv(v),s:0,an:v.an}));
-st.D.forEach((d,i)=>o.push({d:d.d||'',id:1e6+i,l:d.r+' — '+(d.l||'')+(d.an?' — ANNULÉE : '+d.an.m:''),e:0,s:d.m,an:d.an}));
+function allOps(){const o=[];st.V.forEach(v=>o.push({d:v.d,id:v.id,l:rid(v)+' — '+st.S[v.si][1]+' ('+v.mo+')'+(v.an?' — ANNULÉ : '+v.an.m:''),e:tv(v),s:0,an:v.an,k:'v',i:v.id}));
+st.D.forEach((d,i)=>o.push({d:d.d||'',id:1e6+i,l:d.r+' — '+(d.l||'')+(d.an?' — ANNULÉE : '+d.an.m:''),e:0,s:d.m,an:d.an,k:'d',i:i}));
 o.sort((a,b)=>a.d<b.d?-1:a.d>b.d?1:a.id-b.id);let c=st.p.s0||0;o.forEach(x=>{if(!x.an)c+=x.e-x.s;x.c=c});return o}
 function opening(f){return (st.p.s0||0)+(f?allOps().filter(x=>!x.an&&x.d<f).reduce((a,x)=>a+x.e-x.s,0):0)}
-function annulV(id){const v=st.V.find(x=>x.id==id),m=prompt('Motif de l’annulation de '+rid(v)+' :');if(!m)return;v.an={d:today(),m};save();showRecu(id)}
-function retV(id){const v=st.V.find(x=>x.id==id);if(confirm('Rétablir '+rid(v)+' ?')){delete v.an;save();showRecu(id)}}
-function annulD(i){const m=prompt('Motif de l’annulation de cette dépense :');if(!m)return;st.D[i].an={d:today(),m};save();go('dep')}
-function retD(i){delete st.D[i].an;save();go('dep')}
+function annulV(id){const v=st.V.find(x=>x.id==id);if(!W()||(isS()&&v.si!=me.si))return;const m=prompt('Motif de l’annulation de '+rid(v)+' :');if(!m)return;v.an={d:today(),m};v.t=Date.now();save();showRecu(id)}
+function retV(id){const v=st.V.find(x=>x.id==id);if(!W()||(isS()&&v.si!=me.si))return;if(confirm('Rétablir '+rid(v)+' ?')){delete v.an;v.t=Date.now();save();showRecu(id)}}
+function annulD(i){if(!isN())return;const m=prompt('Motif de l’annulation de cette dépense :');if(!m)return;st.D[i].an={d:today(),m};save();go('dep')}
+function retD(i){if(!isN())return;delete st.D[i].an;save();go('dep')}
 let jF='',jT='',rp={t:'Réunion du bureau national',dt:today(),f:'',to:'',dec:''};
 V.jou=()=>{const O=allOps().filter(x=>(!jF||x.d>=jF)&&(!jT||x.d<=jT)),op=opening(jF),E=O.filter(x=>!x.an).reduce((a,x)=>a+x.e,0),S=O.filter(x=>!x.an).reduce((a,x)=>a+x.s,0);
 return `<div class="card"><h3>Journal de caisse (saisie automatique)</h3><p class="note">Chaque paiement et chaque dépense s’ajoutent ici tout seuls, avec le solde cumulé. Les opérations annulées restent visibles, barrées, et ne comptent pas.</p>
 <label>Du</label><input type="date" value="${jF}" onchange="jF=this.value;go('jou')"><label>Au</label><input type="date" value="${jT}" onchange="jT=this.value;go('jou')">
 <p>Solde d’ouverture : <b>${fmt(op)}</b><br>Entrées : <b>${fmt(E)}</b> · Sorties : <b>${fmt(S)}</b><br>Solde final : <b>${fmt(op+E-S)}</b></p>
-<div class="w"><table><tr><th>Date</th><th>Opération</th><th>Entrée</th><th>Sortie</th><th>Solde</th></tr>${O.map(x=>`<tr ${x.an?'style="opacity:.5;text-decoration:line-through"':''}><td>${fd(x.d)}</td><td style="text-align:left">${esc(x.l)}</td><td>${x.e?fmt(x.e):''}</td><td>${x.s?fmt(x.s):''}</td><td>${fmt(x.c)}</td></tr>`).join('')}</table></div></div>`};
+<div class="w"><table><tr><th>Date</th><th>Opération</th><th>Entrée</th><th>Sortie</th><th>Solde</th><th></th></tr>${O.map(x=>`<tr ${x.an?'style="opacity:.5;text-decoration:line-through"':''}><td>${fd(x.d)}</td><td style="text-align:left">${esc(x.l)}</td><td>${x.e?fmt(x.e):''}</td><td>${x.s?fmt(x.s):''}</td><td>${fmt(x.c)}</td><td>${isN()?`<button onclick="delOp('${x.k}',${x.i})">Supprimer</button>`:''}</td></tr>`).join('')}</table></div></div>`};
 V.rap=()=>{const f=rp.f,to=rp.to,inP=d=>(!f||d>=f)&&(!to||d<=to),Vp=st.V.filter(v=>!v.an&&inP(v.d)),O=allOps().filter(x=>inP(x.d)),op=opening(f),
 E=O.filter(x=>!x.an).reduce((a,x)=>a+x.e,0),S=O.filter(x=>!x.an).reduce((a,x)=>a+x.s,0),rq=st.Q.map(()=>0),rx=st.N.map(()=>0);
 Vp.forEach(v=>{spl(v).forEach((k,j)=>rq[j]+=k);v.x.forEach((k,j)=>rx[j]+=k)});
@@ -201,12 +233,35 @@ ${st.R.length?`<h3 style="margin-top:12px">Rapports mémorisés</h3>${st.R.map((
 function saveRap(){st.R.push({id:Date.now(),t:rp.t,dt:rp.dt,f:rp.f,to:rp.to,dec:rp.dec});save();go('rap')}
 function openRap(i){const r=st.R[i];rp={t:r.t,dt:r.dt,f:r.f,to:r.to,dec:r.dec};go('rap')}
 function delRap(i){if(confirm('Supprimer ce rapport mémorisé ?')){st.R.splice(i,1);save();go('rap')}}
-function expJ(){dl(new Blob([JSON.stringify(st)],{type:'application/json'}),'ADNG_sauvegarde_'+today()+'.json')}
+
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function upd(){if(document.getElementById('upd'))return;const b=document.createElement('div');b.id='upd';b.style.cssText='position:fixed;left:8px;right:8px;bottom:8px;z-index:9;background:#1b5e20;color:#fff;padding:12px;border-radius:10px;text-align:center';b.innerHTML='Nouvelle version disponible <button style="margin-left:8px;padding:6px 10px" onclick="location.reload()">Mettre à jour</button>';document.body.appendChild(b)}
+const R_s0=()=>Object.keys(st.p.s0r||{}).filter(k=>rubr().includes(k)).map(k=>st.p.s0r[k]);
+
+function migr(){const p=st.p;if(!p.rep){p.rep=[];const o=p.s0r||{};let t=0;Object.keys(o).forEach(k=>{if(o[k]){p.rep.push({m:o[k],r:k,d:p.s0d||'',n:p.s0n||''});t+=o[k]}});if((p.s0||0)-t>0)p.rep.push({m:p.s0-t,r:'',d:p.s0d||'',n:p.s0n||''})}calcRep()}
+function calcRep(){const p=st.p;p.s0=0;p.s0r={};p.rep.forEach(e=>{p.s0+=e.m;if(e.r)p.s0r[e.r]=(p.s0r[e.r]||0)+e.m})}
+function addRep(){if(!isN())return;sv();const m=parseFloat($('#rm').value)||0;if(m<=0)return alert('Saisissez un montant supérieur à 0.');st.p.rep.push({m,r:$('#rr').value,d:$('#rd').value,n:$('#rn2').value.trim()});calcRep();save();go('par')}
+function delRep(i){if(!isN()||!confirm('Supprimer cette ligne d’ancien solde ?'))return;sv();st.p.rep.splice(i,1);calcRep();save();go('par')}
+function delOp(k,i){if(!isN())return;if(!confirm('Supprimer définitivement cette opération ? Action irréversible. Préférez « Annuler » pour garder une trace.'))return;
+if(k=='v')st.V=st.V.filter(v=>v.id!=i);else st.D.splice(i,1);save();go(cur)}
+function bk(){try{localStorage.setItem('adng_bk',today());localStorage.setItem('adng_bkn',String(nOps()))}catch(e){}}
+function bkMsg(){let d='',n=0;try{d=localStorage.getItem('adng_bk')||'';n=parseInt(localStorage.getItem('adng_bkn')||'0')||0}catch(e){}if(!d)return 'Aucune sauvegarde exportée : envoyez-en une hors du téléphone (onglet Données).';const j=Math.round((new Date(today())-new Date(d))/864e5),p=Math.max(0,nOps()-n);return 'Dernière sauvegarde : '+(j<=0?'aujourd’hui':'il y a '+j+' jour(s)')+(p?' — '+p+' opération(s) non sauvegardée(s).':'.')+(j>7||p>=10?' Pensez à en faire une nouvelle.':'')}
+const appUrl=()=>location.href.split('#')[0].split('?')[0];
+const nOps=()=>st.V.length+st.D.length;
+async function shareLink(){const u=appUrl();try{if(navigator.share){await navigator.share({title:'ADNG Trésorerie',url:u});return}}catch(e){if(e.name=='AbortError')return}try{await navigator.clipboard.writeText(u);alert('Lien copié : '+u)}catch(e){prompt('Copiez ce lien :',u)}}
+async function shareBackup(){const b=new Blob([JSON.stringify(st)],{type:'application/json'}),n='ADNG_sauvegarde_'+today()+'.json',f=new File([b],n,{type:'application/json'});bk();try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:n});return}}catch(e){if(e.name=='AbortError')return}dl(b,n)}
+async function saveApp(){try{const r=await fetch(appUrl());dl(await r.blob(),'index.html')}catch(e){alert('Copie impossible : ouvrez d’abord l’application avec internet.')}}
+function expJ(){bk();dl(new Blob([JSON.stringify(st)],{type:'application/json'}),'ADNG_sauvegarde_'+today()+'.json')}
 function expC(){const q=c=>'"'+String(c).replace(/"/g,'""')+'"',h=['Recu','Date','Matricule','Section','Mois','Mode','Ordinaire'].concat(st.Q.map(x=>x[0]),st.N,['Total','Observation','Statut']);
 const r=st.V.map(v=>[rid(v),fd(v.d),mat(v.si),st.S[v.si][1],v.mo,v.mode,v.g].concat(spl(v),v.x,[v.g+xs(v),v.ob,v.an?'ANNULÉ':'']));
 dl(new Blob(['\ufeff'+[h].concat(r).map(l=>l.map(q).join(';')).join('\r\n')],{type:'text/csv'}),'ADNG_journal_'+today()+'.csv')}
-function impJ(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.S||!d.Q||!d.V)throw 0;if(confirm('Remplacer toutes les données actuelles par cette sauvegarde ?')){st=d;save();go('acc')}}catch(e){alert('Fichier de sauvegarde invalide.')}};r.readAsText(f)}
+function impJ(el){const f=el.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);
+if(d.type=='section'){if(!isN())return alert('Seul l’admin national peut fusionner un fichier de section.');
+if(JSON.stringify(d.mats)!=JSON.stringify(st.S.map((s,i)=>mat(i))))return alert('Les sections de ce fichier ne correspondent pas à votre configuration. Envoyez-lui votre sauvegarde complète d’abord.');
+const x=merge(d);alert('Fusion terminée : '+x[0]+' paiement(s) ajouté(s), '+x[1]+' mis à jour, '+x[2]+' déjà présent(s).');go('don');return}
+if(!d.S||!d.Q||!d.V)throw 0;if(!confirm('Remplacer les données de cet appareil par ce fichier ?'))return;
+const mine=isS()?st.V.filter(v=>v.si==me.si):[];st=d;if(!st.R)st.R=[];migr();if(mine.length)merge({V:mine,si:me.si});save();go('acc')}catch(e){alert('Fichier invalide.')}el.value=''};r.readAsText(f)}
 $('#lg').src=LOGO;$('#wm').style.backgroundImage='url('+LOGO+')';
 go('acc');
 </script>
-<script>var OFF='';if('serviceWorker' in navigator&&location.protocol.indexOf('http')==0)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(()=>navigator.serviceWorker.ready).then(()=>{OFF=' · hors ligne prêt ✓';var e=document.getElementById('sub');if(e)e.textContent+=OFF}).catch(()=>{}))</script></body></html>
+<script>var OFF='';if('serviceWorker' in navigator&&location.protocol.indexOf('http')==0)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const w=reg.installing;if(w)w.addEventListener('statechange',()=>{if(w.state=='installed'&&navigator.serviceWorker.controller)upd()})});return navigator.serviceWorker.ready}).then(()=>{OFF=' · hors ligne prêt ✓';var e=document.getElementById('sub');if(e)e.textContent+=OFF}).catch(()=>{}))</script></body></html>
