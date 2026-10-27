@@ -45,11 +45,11 @@ Q:[['Quota FADI',5000],['Quota mosquée',5000],['Quota agrément nationale',3000
 N:['Cas sociaux','Zikiri','Koumouss'],V:[],D:[]});
 let st=null;try{st=JSON.parse(localStorage.getItem(KEY))}catch(e){}
 if(!st)st=def();if(!st.R)st.R=[];migr();
-let me={r:'nat',si:0,p:''};
+let me=null;try{const r=localStorage.getItem('adng_role');if(r)me={r:r=='ecriture'?'nat':'lec',si:0,p:''};else if(localStorage.getItem('adng_loc'))me={r:'nat',si:0,p:''}}catch(e){}
 const hp=s=>{let h=5381;for(const c of String(s))h=((h<<5)+h+c.charCodeAt(0))|0;return String(h)};
 const isN=()=>me&&me.r=='nat',isS=()=>me&&me.r=='sec',isL=()=>me&&me.r=='lec',W=()=>isN()||isS();
 const allow=()=>isN()?['acc','pay','rec','jou','sui','bud','dep','bil','rap','par','don']:isS()?['acc','pay','rec','sui','don']:['acc','rec','jou','sui','bud','bil','rap','don'];
-const roleLbl=()=>'';
+const roleLbl=()=>{lastSY=SY;return SY};
 function setup(){cur='';$('#nav').innerHTML='';$('#sub').textContent='Choix du profil';
 $('#m').innerHTML=`<div class="card"><h3>Qui utilise cet appareil ?</h3><label>Profil</label><select id="sr" oninput="swR()"><option value="nat">Admin national (tout, fusion des fichiers)</option><option value="sec">Admin de section (saisie de sa section)</option><option value="lec">Lecteur (consultation seulement)</option></select>
 <div id="ss" style="display:none"><label>Section</label><select id="si">${st.S.map((s,i)=>`<option value="${i}">${mat(i)} — ${esc(s[1])}</option>`).join('')}</select></div>
@@ -63,7 +63,7 @@ function merge(f){let a=0,u=0,s=0;(f.V||[]).filter(w=>w.si==f.si).forEach(w=>{co
 if(!e){st.V.push(Object.assign({},w,{id:st.V.reduce((x,y)=>Math.max(x,y.id),0)+1}));a++}else if((w.t||0)>(e.t||0)){const id=e.id;Object.assign(e,w,{id});u++}else s++});save();return [a,u,s]}
 function expSec(){bk();dl(new Blob([JSON.stringify({type:'section',si:me.si,mats:st.S.map((s,i)=>mat(i)),V:st.V.filter(v=>v.si==me.si),t:Date.now()})],{type:'application/json'}),'ADNG_section_'+st.S[me.si][0]+'_'+today()+'.json')}
 
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){alert('Sauvegarde impossible sur ce navigateur : utilisez l’export dans Données.')}};
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){alert('Sauvegarde impossible sur ce navigateur : utilisez l’export dans Données.')}push()};
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=n=>Math.round(n||0).toLocaleString('fr-FR'),$=s=>document.querySelector(s);
 const mat=i=>'ADNG-'+st.S[i][0]+'-'+String(i+1).padStart(2,'0'),rid=v=>v.u||'REC-'+String(v.id).padStart(4,'0');
@@ -76,7 +76,7 @@ const dep=()=>st.D.filter(d=>!d.an).reduce((a,d)=>a+d.m,0);
 const rubr=()=>st.Q.map(q=>q[0]).concat(st.N);
 const tabs=[['acc','Accueil'],['pay','Paiement'],['rec','Reçus'],['jou','Journal'],['sui','Suivi'],['bud','Budget'],['dep','Dépenses'],['bil','Bilan'],['rap','Rapport'],['par','Paramètres'],['don','Données']];
 let cur='acc',selRec=0;
-function go(k){if(!me)return setup();if(!allow().includes(k))k='acc';cur=k;$('#nav').innerHTML=tabs.filter(t=>allow().includes(t[0])).map(t=>`<button class="${t[0]==k?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
+function go(k){if(!me)return loginScreen();if(!allow().includes(k))k='acc';cur=k;$('#nav').innerHTML=tabs.filter(t=>allow().includes(t[0])).map(t=>`<button class="${t[0]==k?'on':''}" onclick="go('${t[0]}')">${t[1]}</button>`).join('');
 $('#sub').textContent=`Exercice ${st.p.exo} · GNF · 1 FCFA = ${st.p.taux} GNF`+(window.OFF||'');$('#sub').textContent+=roleLbl();$('#m').innerHTML=V[k]();scrollTo(0,0)}
 const V={};
 V.acc=()=>{const a=agg(),bud=tot()*eff()*12,enc=a.q.reduce((x,y)=>x+y,0),nx=a.x.reduce((x,y)=>x+y,0),d=dep();
@@ -163,10 +163,10 @@ function sv(){const p=st.p;p.taux=parseFloat($('#pt').value)||15;p.cotis=parseFl
 st.S.forEach((s,i)=>s[2]=parseInt($('#se'+i).value)||0);st.Q.forEach((q,j)=>{rn(q,0,'qn'+j);q[1]=parseFloat($('#qp'+j).value)||0});st.N.forEach((n,j)=>rn(st.N,j,'nn'+j));save();
 }
 function savePar(){const oc=st.p.cotis;sv();if(oc!=st.p.cotis&&tot()==oc){rebal(-1);save()}if(tot()!=st.p.cotis)alert('Attention : la somme des parts ('+fmt(tot())+') diffère de la cotisation ('+fmt(st.p.cotis)+').');go('par')}
-V.don=()=>`<div class="card"><h3>Échange de fichiers</h3>
+V.don=()=>`<div class="card"><h3>Synchronisation</h3><p class="note">${syncMsg()}</p>${fbUser?`<button class="btn s" onclick="doLogout()">Se déconnecter</button>`:`<button class="btn s" onclick="doLogout()">Aller à l’écran de connexion</button>`}<h3 style="margin-top:14px">Échange de fichiers</h3>
 ${isN()?`<button class="btn" onclick="expJ()">Exporter la sauvegarde complète (.json) — à conserver en lieu sûr</button><button class="btn s" onclick="expC()">Exporter le journal (.csv) pour Excel</button><label>Restaurer une sauvegarde (remplace les données de cet appareil)</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
 ${isS()?`<button class="btn" onclick="expSec()">Exporter mes paiements (.json) — à envoyer à l’admin national</button><label>Recevoir la configuration (sauvegarde de l’admin national)</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
-${isL()?`<label>Recevoir la dernière sauvegarde de l’admin national</label><input type="file" accept=".json,application/json" onchange="impJ(this)">`:''}
+${isL()?`<p class="note">Les données se mettent à jour toutes seules quand l’appareil a internet.</p>`:''}
 
 <p class="note">Exportez régulièrement une sauvegarde complète et conservez-la hors du téléphone (WhatsApp, e-mail, Drive). Elle sert aussi à transférer vos données vers un autre appareil.</p></div><div class="card"><h3>En cas de perte du téléphone</h3>
 <p class="note">Votre application se retrouve à ce lien, toujours dans sa dernière version publiée :</p>
@@ -251,6 +251,32 @@ const nOps=()=>st.V.length+st.D.length;
 async function shareLink(){const u=appUrl();try{if(navigator.share){await navigator.share({title:'ADNG Trésorerie',url:u});return}}catch(e){if(e.name=='AbortError')return}try{await navigator.clipboard.writeText(u);alert('Lien copié : '+u)}catch(e){prompt('Copiez ce lien :',u)}}
 async function shareBackup(){const b=new Blob([JSON.stringify(st)],{type:'application/json'}),n='ADNG_sauvegarde_'+today()+'.json',f=new File([b],n,{type:'application/json'});bk();try{if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:n});return}}catch(e){if(e.name=='AbortError')return}dl(b,n)}
 async function saveApp(){try{const r=await fetch(appUrl());dl(await r.blob(),'index.html')}catch(e){alert('Copie impossible : ouvrez d’abord l’application avec internet.')}}
+
+const FB={apiKey:"AIzaSyCRssV9GvsbS428YwoNeJMSemMuL9_7vHA",authDomain:"adng-tresorerie.firebaseapp.com",projectId:"adng-tresorerie",storageBucket:"adng-tresorerie.firebasestorage.app",messagingSenderId:"1033479776793",appId:"1:1033479776793:web:21488951a156b4e9995888"};
+const GS='https://www.gstatic.com/firebasejs/10.14.1/';
+let fb=null,fbUser=null,pushT=null,unsub=null,SY='',lastSY='';
+async function fbInit(){if(fb)return fb;try{const A=await import(GS+'firebase-app.js'),Au=await import(GS+'firebase-auth.js'),F=await import(GS+'firebase-firestore.js');
+const app=A.initializeApp(FB),auth=Au.getAuth(app),db=F.initializeFirestore(app,{localCache:F.persistentLocalCache({tabManager:F.persistentMultipleTabManager()})});fb={A,Au,F,app,auth,db};return fb}catch(e){SY=' · synchro indisponible';return null}}
+function upSub(){const e=$('#sub');if(!e||!me)return;const t=e.textContent;e.textContent=(lastSY&&t.endsWith(lastSY)?t.slice(0,-lastSY.length):t)+SY;lastSY=SY}
+function loginScreen(){cur='';$('#nav').innerHTML='';$('#sub').textContent='Connexion';$('#m').innerHTML=`<div class="card"><h3>Connexion</h3><label>Identifiant</label><input id="li" autocapitalize="none" autocomplete="username"><label>Mot de passe</label><input id="lp" type="password" autocomplete="current-password"><button class="btn" onclick="doLogin()">Se connecter</button><button class="btn s" onclick="goLocal()">Continuer sans connexion (données sur cet appareil seulement)</button><p class="note">Première connexion : internet nécessaire. Ensuite, l’application fonctionne hors ligne.</p></div>`}
+function goLocal(){try{localStorage.setItem('adng_loc','1')}catch(e){}me={r:'nat',si:0,p:''};go('acc')}
+async function doLogin(){const id=$('#li').value.trim().toLowerCase(),pw=$('#lp').value;if(!id||!pw)return alert('Saisissez l’identifiant et le mot de passe.');
+const f=await fbInit();if(!f)return alert('Connexion impossible : vérifiez internet.');
+try{const c=await f.Au.signInWithEmailAndPassword(f.auth,id+'@adng.invalid',pw);await afterAuth(c.user)}catch(e){alert('Identifiant ou mot de passe incorrect, ou pas de connexion.')}}
+async function afterAuth(u){fbUser=u;let role='';try{const d=await fb.F.getDoc(fb.F.doc(fb.db,'users',u.uid));role=d.exists()?(d.data().role||''):''}catch(e){try{role=localStorage.getItem('adng_role')||''}catch(x){}}
+if(role!='ecriture'&&role!='lecture'){alert('Ce compte n’a pas de rôle valide : contactez la personne qui gère le projet.');return}
+try{localStorage.setItem('adng_role',role);localStorage.removeItem('adng_loc')}catch(e){}me={r:role=='ecriture'?'nat':'lec',si:0,p:''};startSync();go(cur&&cur!='pay'?cur:'acc')}
+async function doLogout(){if(!confirm('Se déconnecter de cet appareil ?'))return;try{if(unsub)unsub();if(fb)await fb.Au.signOut(fb.auth)}catch(e){}try{localStorage.removeItem('adng_role');localStorage.removeItem('adng_loc')}catch(e){}fbUser=null;me=null;SY='';go('acc')}
+function applyRemote(sv){const d=JSON.parse(sv.data);if(!d.S||!d.Q||!d.V)return;st=d;if(!st.R)st.R=[];migr();st.sy=sv.t;try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}go(cur&&me?cur:'acc')}
+function startSync(){if(!fb||!fbUser||unsub)return;const F=fb.F,ref=F.doc(fb.db,'adng','etat');
+if(isN()){F.getDoc(ref).then(s=>{if(!s.exists()){push();return}const sv=s.data();const vide=(st.V.length+st.D.length+(st.p.rep||[]).length)==0&&!st.sy;
+if(sv.t!==st.sy){if(vide||confirm('Le serveur contient des données différentes de cet appareil. OK = charger celles du serveur (recommandé). Annuler = écraser le serveur avec les données de cet appareil.'))applyRemote(sv);else push()}}).catch(()=>{});
+unsub=F.onSnapshot(ref,{includeMetadataChanges:true},s=>{SY=s.metadata.hasPendingWrites?' · envoi en attente':(s.metadata.fromCache?' · hors ligne':' · synchro ✓');upSub()},()=>{SY=' · accès refusé';upSub()})}
+else{unsub=F.onSnapshot(ref,{includeMetadataChanges:true},s=>{if(s.exists()&&s.data().t!==st.sy)applyRemote(s.data());SY=s.metadata.fromCache?' · données en cache':' · à jour ✓';upSub()},()=>{SY=' · accès refusé';upSub()})}}
+function push(){if(!fb||!fbUser||!isN())return;clearTimeout(pushT);pushT=setTimeout(()=>{const t=Date.now();st.sy=t;try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}
+fb.F.setDoc(fb.F.doc(fb.db,'adng','etat'),{data:JSON.stringify(st),t,by:fbUser.uid}).catch(()=>{SY=' · envoi refusé';upSub()})},1200)}
+async function boot(){const f=await fbInit();if(!f)return;f.Au.onAuthStateChanged(f.auth,u=>{if(u&&!fbUser)afterAuth(u)})}
+const syncMsg=()=>fbUser?'Connecté en mode '+(isN()?'saisie':'lecture')+'.'+SY:'Mode sans connexion : les données restent sur cet appareil.';
 function expJ(){bk();dl(new Blob([JSON.stringify(st)],{type:'application/json'}),'ADNG_sauvegarde_'+today()+'.json')}
 function expC(){const q=c=>'"'+String(c).replace(/"/g,'""')+'"',h=['Recu','Date','Matricule','Section','Mois','Mode','Ordinaire'].concat(st.Q.map(x=>x[0]),st.N,['Total','Observation','Statut']);
 const r=st.V.map(v=>[rid(v),fd(v.d),mat(v.si),st.S[v.si][1],v.mo,v.mode,v.g].concat(spl(v),v.x,[v.g+xs(v),v.ob,v.an?'ANNULÉ':'']));
@@ -262,6 +288,6 @@ const x=merge(d);alert('Fusion terminée : '+x[0]+' paiement(s) ajouté(s), '+x[
 if(!d.S||!d.Q||!d.V)throw 0;if(!confirm('Remplacer les données de cet appareil par ce fichier ?'))return;
 const mine=isS()?st.V.filter(v=>v.si==me.si):[];st=d;if(!st.R)st.R=[];migr();if(mine.length)merge({V:mine,si:me.si});save();go('acc')}catch(e){alert('Fichier invalide.')}el.value=''};r.readAsText(f)}
 $('#lg').src=LOGO;$('#wm').style.backgroundImage='url('+LOGO+')';
-go('acc');
+boot();go('acc');
 </script>
 <script>var OFF='';if('serviceWorker' in navigator&&location.protocol.indexOf('http')==0)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const w=reg.installing;if(w)w.addEventListener('statechange',()=>{if(w.state=='installed'&&navigator.serviceWorker.controller)upd()})});return navigator.serviceWorker.ready}).then(()=>{OFF=' · hors ligne prêt ✓';var e=document.getElementById('sub');if(e)e.textContent+=OFF}).catch(()=>{}))</script></body></html>
